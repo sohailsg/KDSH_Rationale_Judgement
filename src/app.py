@@ -97,12 +97,13 @@ def process_single_row(row, index, validator, classifier, claim_extractor):
 
     # Evaluate each atomic claim
     for claim in claims:
+        # Revert K to 5 for stability
         evidence_items = index.search(claim, book_name=normalized_book, k=5)
         nli_probs = validator.get_raw_probs(claim, evidence_items)
         retrieval_scores = [item['score'] for item in evidence_items]
 
-        # Use classifier to predict 0/1 for this claim
-        feat_vec = classifier.extract_features(nli_probs, retrieval_scores)
+        # Pass claim text for overlap calculation
+        feat_vec = classifier.extract_features(nli_probs, retrieval_scores, claim)
         feature_vectors.append(feat_vec)
 
     return feature_vectors
@@ -140,20 +141,21 @@ def run_training_and_eval(data_dir):
             agg_features = [0.0] * 6 # Fallback size
         else:
             matrix = np.array(claim_features_list)
-            # Feature def from Trainer: [max_contra, max_entail, max_neutral, top_retrieval, mean_retrieval]
+            # Feature def: [max_contra, max_entail, max_neutral, top_retrieval, mean_retrieval, max_overlap]
 
             # Global aggregates
             global_max_contra = np.max(matrix[:, 0])
             global_max_entail = np.max(matrix[:, 1])
             global_max_retrieval = np.max(matrix[:, 3])
+            global_max_overlap = np.max(matrix[:, 5])
 
-            # Count of highly contradicted claims (p_contra > 0.5)
-            # This is a strong signal for "Contradict"
+            # Count of high contra (logic based)
+            # Use overlap as a filter? If high contra AND some overlap
+            # Let's trust the classifier to learn the interaction
             num_bad_claims = np.sum(matrix[:, 0] > 0.5)
 
-            # Interaction: Max Contra weighted by its retrieval score?
-            # Or just pass the count.
-            agg_features = [global_max_contra, global_max_entail, global_max_retrieval, num_bad_claims, len(claim_features_list)]
+            # Aggregated Vector: [MaxContra, MaxEntail, MaxRetrieval, MaxOverlap, NumBad, NumClaims]
+            agg_features = [global_max_contra, global_max_entail, global_max_retrieval, global_max_overlap, num_bad_claims, len(claim_features_list)]
 
         X.append(agg_features)
         y.append(label)
@@ -180,14 +182,15 @@ def run_training_and_eval(data_dir):
             claim_features_list = process_single_row(row, index, validator, classifier, claim_extractor)
 
             if not claim_features_list:
-                agg_features = [0.0] * 5
+                agg_features = [0.0] * 6
             else:
                 matrix = np.array(claim_features_list)
                 global_max_contra = np.max(matrix[:, 0])
                 global_max_entail = np.max(matrix[:, 1])
                 global_max_retrieval = np.max(matrix[:, 3])
+                global_max_overlap = np.max(matrix[:, 5])
                 num_bad_claims = np.sum(matrix[:, 0] > 0.5)
-                agg_features = [global_max_contra, global_max_entail, global_max_retrieval, num_bad_claims, len(claim_features_list)]
+                agg_features = [global_max_contra, global_max_entail, global_max_retrieval, global_max_overlap, num_bad_claims, len(claim_features_list)]
 
             pred = classifier.predict([agg_features])[0]
 
@@ -195,6 +198,7 @@ def run_training_and_eval(data_dir):
 
             if pred == 0 and claim_features_list:
                 matrix = np.array(claim_features_list)
+                # Pick claim with max contradiction
                 bad_claim_idx = np.argmax(matrix[:, 0])
 
                 content = row.get('content', '') or row.get('backstory', '')
@@ -208,8 +212,6 @@ def run_training_and_eval(data_dir):
                 ev = index.search(bad_claim, book_name=normalized_book, k=1)
                 if ev:
                     rationale_text = f"Claim '{bad_claim[:50]}...' contradicted by: '{ev[0]['chunk']['text'][:200]}...'"
-                else:
-                    rationale_text = f"Claim '{bad_claim[:50]}...' likely contradictory."
 
             results.append({
                 'id': row.get('id', i),

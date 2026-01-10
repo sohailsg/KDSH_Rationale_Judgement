@@ -1,0 +1,99 @@
+id,actual,predicted,claim,evidence,max_contra,max_entail,retrieval_score
+109,0,1,Villefort’s drift toward the royalists disappointe,"nt that he had anticipated the annoyance;
+although it certainly never had occurred to him that his f",0.8909804821014404,0.18774458765983582,0.7461794912815094
+104,1,0,His parents were targeted in a reprisal for suppor,"flected, partly on the means of
+deceiving Mercédès as to the cause of his absence, partly on plans o",0.9557755589485168,0.03746821731328964,0.6531456468009196
+35,0,1,The mutiny began when Captain Grant uncovered his ,"ithout him, and that consequently his absence could be in no way
+prejudicial to their interests.
+
+""W",0.7276603579521179,0.044477421790361404,0.7105759084224701
+68,1,0,"At ten, migrating with his clan, a flame-shaped bi","his sinister countenance, showed him to be a
+formidable individual.
+
+He was a Maori chief of high ra",0.877876877784729,0.09224320203065872,0.7371610122832295
+88,1,0,Under the alias “Citizen Noirtier” he joined the G,"d not our sincerity, enthusiasm, or
+devotion.”
+
+“They had, however, what supplied the place of those",0.8083584308624268,0.14519023895263672,0.7479962706565857
+112,0,1,Through underground circles he met the Count of Mo,"truck a quarter to twelve; the west wind
+bore on its moistened gusts the doleful vibration of the th",0.9424195289611816,0.2592380940914154,0.6580540686845779
+79,0,1,"After the killing, elders held a “Blood-and-Bone” ","""That would be very difficult,"" answered Paganel, ""for an Indian
+understands nothing of geography.""
+",0.9240679740905762,0.06909540295600891,0.6738837659358978
+12,0,1,He declined to take part in charting the maiden vo,", and this is my brother.""
+
+""Miss Grant! Miss Grant!"" cried Lady Helena, drawing the young girl
+towa",0.9556891322135925,0.11661681532859802,0.6992694057350662
+92,0,1,**Father-son Rift**: Discovering that his elder so,"with your approbation.”
+
+The eye of the invalid still retained that vacancy of expression which
+prev",0.8777761459350586,0.1067415326833725,0.7508808672428131
+11,0,1,One night he saw first mate Ayrton secretly meet s,"ecital the quartermaster's own experiences possessed a more real
+interest. Indeed, thanks to the doc",0.9151597023010254,0.05874328687787056,0.6954495161771774
+65,1,0,"British officers marvelled that he handled canoe, ","he coast, when, at no great distance, a number
+of natives appeared, who rushed towards the little pa",0.7221006751060486,0.19935743510723114,0.7599057555198669
+107,0,1,Napoleon’s triumph at Waterloo ended his hopes; in,"ending to Paris, he carefully preserved
+the petition that so fearfully compromised Dantès, in the ho",0.8940519690513611,0.06919293850660324,0.6777907588514405
+66,0,1,Lord Glenarvan met him briefly at a London Royal G,"ompletely bewildered by the presence of this intruder.
+
+""Sir,"" said Glenarvan, at length, ""whom have",0.7454042434692383,0.22356751561164856,0.7333703339099884
+89,0,1,**Turning Point**: Arguing for procedural justice ,"was, I would console
+myself; but to be in the midst of persons elevated by myself to places
+of honor",0.7424098253250122,0.12120078504085541,0.6883899937752262
+123,1,0,In Rome he and Noirtier de Villefort studied Napol,"to
+denounce these wretched criminals who are unworthy of the honor
+bestowed on them.”
+
+Beauchamp was",0.9618943929672241,0.16189269721508026,0.6812765829472298
+116,0,1,In Lisbon he backed constitutionalist Prince Pedro,"to reach the water-jug, and fainted in the midst of his
+dried herbs. Five minutes after the new tele",0.9505499601364136,0.06432431936264038,0.6228247557507904
+43,0,1,"Suspected of colluding with the enemy, he panicked",", ""but I fear I am very indiscreet.""
+
+Thus far the Duncan had acquitted herself admirably: in every ",0.6904376149177551,0.12196547538042068,0.6429420113563538
+108,1,0,"He married a gentle apolitical woman, hoping domes","d with
+mercy,” and receiving a sweet and approving smile in return, Villefort
+departed with paradise",0.9128400087356567,0.15088044106960297,0.702592474352044
+29,1,0,The night before the mate was hanged he pressed a ,"nvicts had visited that part of the coast.
+
+[Sidenote: THE LAST NIGHT IN AUSTRALIA.]
+
+It was a gray ",0.8900468349456787,0.06507404893636703,0.6559673100709915
+39,0,1,After discharge he adopted the alias Ben Joyce and,"topping the hemorrhage. The patient was then laid on his
+side, his head and breast raised, and Lady ",0.8567027449607849,0.09527811408042908,0.7008218467235565
+71,0,1,During the north-island war he let troops burn an ,"anacos, like those that had attacked them so violently on
+the Andes, started up before them by hundr",0.7391127347946167,0.11475647985935211,0.690286163229358
+117,0,1,While escaping he hid lifetime research manuscript,"cumstance was mentioned as a fact, declared he had
+seen the quarries in question, which gave great w",0.9069652557373047,0.12450937181711197,0.698159396648407
+17,0,1,His father died early; his mother remarried a Fren,"ady Helena and Mary
+Grant, suppressing their terror, conversed in low tones with Glenarvan,
+and the ",0.8767696022987366,0.043130677193403244,0.5976519137620926
+36,1,0,Ritual disguise: the Bible-quoting habit he had pi,"as
+accomplished. In fifteen days more of travel equally rapid the little
+party would reach the shore",0.7815857529640198,0.09400703758001328,0.6721437573432922
+120,1,0,He invented a “salt-blood” ink that revealed under,"determined to make for them. But how could he find his
+way in the darkness of the night?
+
+At this mo",0.9468264579772949,0.061193954199552536,0.6977337300777435
+105,0,1,He became head of a clandestine anti-Bonaparte soc,"ondin to be free from a small spice of the old leaven.” A
+deep crimson suffused the countenance of V",0.9212663173675537,0.16235990822315216,0.6409621983766556
+106,0,1,At a society meeting he met Fernand; though on opp,"flected, partly on the means of
+deceiving Mercédès as to the cause of his absence, partly on plans o",0.9107162952423096,0.20257361233234406,0.700648024391759
+118,0,1,"French gendarmes seized him at Toulon, accusing hi","oached him just as Danglars, whom Fernand seemed most
+anxious to avoid, had joined him in a corner o",0.9706771969795227,0.16656433045864105,0.6643528044223785
+126,1,0,His sister was burned as a witch for spurning a no,"first
+marriage, scarcely eighteen, was still one of the well-regulated Paris
+salons where the worshi",0.9696114659309387,0.05595746263861656,0.6618268638849258
+96,0,1,When he saw that Valentine had inherited his tremb,"coming of daylight.
+
+From behind the door a human figure appeared, but the girl was too
+familiar wit",0.8635493516921997,0.439145028591156,0.7189019445652565
+45,0,1,Watching natives slaughtered in a raid re-awakened," the
+natives. If, unfortunately, the Maoris, more crafty than the fugitives,
+had feigned a retreat t",0.8716642260551453,0.3873105049133301,0.6974989707097774
+14,0,1,Mutual recognition with Major McNabbs: both had li,"-boy or sailor he _would serve_. The captain was
+accordingly commissioned to teach him the duties of",0.5879162549972534,0.27923163771629333,0.6856830418109894
+41,1,0,In Lisbon he unwittingly helped a black-marketeer ,"en,"" he soliloquized; ""I saw a ship's light, the
+Duncan's. Ah! why cannot my eyes pierce the darknes",0.8715868592262268,0.06256181746721268,0.6917315572500229
+130,0,1,What seemed an epileptic fit was in fact sudden de,"On the other hand, the symptoms
+may be much more violent, and cause me to fall into fearful
+convulsi",0.817081868648529,0.33580419421195984,0.6630368530750275

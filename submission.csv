@@ -1,25 +1,41 @@
 id,label,rationale
-95,1,Consistent with canon.
-136,0,"Claim 'From 1800 onward he lived quietly on a small islan...' contradicted by: 'he daylight which even in the desert makes us fear we are watched and
-observed. This feeling was so strong that at the moment when Edmond was
-about to begin his labor, he stopped, laid down his pickax...'"
+95,0,"Claim 'Learning that Villefort meant to denounce him to L...' contradicted by: 'of writing in the evening what had
+transpired in the morning? Do you keep a journal?”
+
+“No, my life has been passed in frivolity; I wish to forget it myself.”
+
+“Do you talk in your sleep?”
+
+30275m
+
+
+
+...'"
+136,1,Consistent with canon.
 59,1,Consistent with canon.
-60,1,Consistent with canon.
-124,1,Consistent with canon.
-111,0,"Claim 'Though bodily strength ebbed he still pulled strin...' contradicted by: 'till this extraordinary silence appeared strange to him, and
-he called a second and third time; still no answer. Then he determined
-to go up. Noirtier’s room was opened, like all the rest. The first
-t...'"
+60,0,"Claim 'First rescue: in 1852 an avalanche buried a silver...' contradicted by: 'break. The horses advanced at a brisk
+pace among the tufts of ""paja-brava,"" a kind of grass that serves the
+Indians as a shelter during the storms.]
+
+Early in the afternoon, the first traces of animal...'"
+124,0,"Claim 'On the Marseille quay he noticed young Caderousse ...' contradicted by: 'hest in the hold, which you shall
+have tomorrow. But, hush, here comes somebody.”
+
+“’Tis Caderousse, who has heard of your arrival, and no doubt comes to
+congratulate you on your fortunate return.”
+
+“...'"
+111,1,Consistent with canon.
 135,1,Consistent with canon.
 27,1,Consistent with canon.
-110,0,"Claim 'He kept a locked study full of revolutionary pamph...' contradicted by: '.
-This is all I can say, sir; if you wish to learn more, address yourself
-to M. de Boville, the inspector of prisons, No. 15, Rue de Nouailles;
-he has, I believe, two hundred thousand francs in Morrel...'"
+110,1,Consistent with canon.
 42,1,Consistent with canon.
 56,1,Consistent with canon.
 80,1,Consistent with canon.
-28,1,Consistent with canon.
+28,0,"Claim 'The mate of the merchant Emerald Bird took him on ...' contradicted by: 'tory merited _entire_ confidence. This unexpected
+meeting might be suspicious. To be sure, Ayrton had mentioned facts and
+dates that agreed, and striking particulars. But details, however exact
+they m...'"
 101,1,Consistent with canon.
 91,0,"Claim 'Working directly for Fouché, he organised the assa...' contradicted by: ' and his intellect is exhausted by
 reflecting on them. You will find very few persons who will go and
@@ -63,24 +79,32 @@ the shoulder. Edmond started.
 three alphabets—one large, one middling, and one small; and pointed out
 to him that by the help of a sharp instrument he could trace the
 letters o...'"
-51,1,Consistent with canon.
-127,0,"Claim 'During twenty years in one cell he kept his wits b...' contradicted by: 'of a plan of his own cell and that of Dantès, with the
-passage which united them. In this passage he proposed to drive a level
-as they do in mines; this level would bring the two prisoners
-immediately...'"
+51,0,"Claim 'Horse-thieves attacked; the old shepherd died shie...' contradicted by: 'of the red
+wolves. A few moments more, and the whole drove would rush into the
+inclosure.
+
+[Illustration]
+
+Thalcave discharged his carbine for the last time, stretched out one
+more of their enemies, a...'"
+127,1,Consistent with canon.
 133,1,Consistent with canon.
 52,1,Consistent with canon.
 114,1,Consistent with canon.
-2,1,Consistent with canon.
+2,0,"Claim 'Caught secretly studying Latin in the church schoo...' contradicted by: ' was
+a Portuguese! It is Portuguese that you have been studying for six
+weeks.""
+
+""Camoëns! Lusiad! Portuguese!""
+
+Paganel could say no more. His eyes wandered, while a peal of Homeric
+laughter rang in ...'"
 33,0,"Claim 'He volunteered for Captain Grant’s crew chiefly to...' contradicted by: 'TWO YEARS OF SLAVERY.]
 
 The quartermaster now told the story of the Britannia and her voyage
 across the Pacific. During the period of a year Harry Grant landed
 at the principal ports of Oceanica, oppo...'"
-15,0,"Claim 'Calm before cannibals: his Amazon years taught him...' contradicted by: 'xcepting
-Robert, were still in good health; and, since the journey had begun
-under such favorable auspices, they thought it best to profit by it,
-and push on. The following day they advanced rapidly, ...'"
+15,1,Consistent with canon.
 82,1,Consistent with canon.
 37,0,"Claim 'Tom Ayrton was born near Exeter to a fisherman fat...' contradicted by: 'main,
 if you can. Ben Joyce should see himself face to face with all his
@@ -88,7 +112,10 @@ intended victims.""
 
 Lady Helena yielded to this request, and Mary Grant and she took their
 places beside him, while around them...'"
-3,1,Consistent with canon.
+3,0,"Claim 'After his mother died he quarrelled with his fathe...' contradicted by: 'ains of the mizen-mast and the empty casks,"" was
+the reply. ""It will be a difficult, but not impossible task, for the
+Macquarie's anchors are small. Once cast however, if they do not drag,
+I shall be ...'"
 103,0,"Claim 'As Napoleon climbed toward dictatorship Noirtier d...' contradicted by: 'sted him greatly, for after having perused the first
 documents he turned over the leaves until he reached the deposition
 respecting Edmond Dantès. There he found everything arranged in due
@@ -119,9 +146,20 @@ for,” replied Edmond, still incredulous.
 
 “I did. Aided by the remaining fragment, ...'"
 61,1,Consistent with canon.
-86,1,Consistent with canon.
+86,0,"Claim 'At first Glenarvan found him haughty and cold, yet...' contradicted by: 'ut indistinctly. How we loved
+him, my lord! Well, I think one must be very young to love his father
+well.""
+
+""And old to reverence him, my child,"" replied Glenarvan, quite moved by
+the words that came ...'"
 38,1,Consistent with canon.
-132,1,Consistent with canon.
+132,0,"Claim 'By eighteen he was a star student at Rome Universi...' contradicted by: 'es, and at his age, Alexander, Cæsar, and Napoleon, who have all made
+some noise in the world, were quite behind him.”
+
+“So,” continued Franz, “the hero of this history is only
+two-and-twenty?”
+
+“Scar...'"
 77,1,Consistent with canon.
 70,1,Consistent with canon.
 115,1,Consistent with canon.

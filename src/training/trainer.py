@@ -4,6 +4,7 @@ import pandas as pd
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 import os
+import re
 
 class LogicClassifier:
     def __init__(self):
@@ -15,9 +16,24 @@ class LogicClassifier:
             random_state=42
         )
 
-    def extract_features(self, nli_results, retrieval_scores):
+    def compute_overlap(self, claim, evidence_text):
+        if not claim or not evidence_text:
+            return 0.0
+
+        # Simple token set overlap
+        # Filter for words > 3 chars to avoid 'the', 'and'
+        claim_tokens = set(w.lower() for w in re.findall(r'\w+', claim) if len(w) > 3)
+        ev_tokens = set(w.lower() for w in re.findall(r'\w+', evidence_text) if len(w) > 3)
+
+        if not claim_tokens:
+            return 0.0
+
+        intersection = claim_tokens.intersection(ev_tokens)
+        return len(intersection) / len(claim_tokens) # Recall-like metric
+
+    def extract_features(self, nli_results, retrieval_scores, claim_text):
         if not nli_results:
-            return [0.0] * 5
+            return [0.0] * 6
 
         contra_probs = [r['probs'][0] for r in nli_results]
         entail_probs = [r['probs'][1] for r in nli_results]
@@ -31,7 +47,12 @@ class LogicClassifier:
         top_retrieval = retrieval_scores[0] if retrieval_scores else 0
         mean_retrieval = np.mean(retrieval_scores) if retrieval_scores else 0
 
-        return [max_contra, max_entail, max_neutral, top_retrieval, mean_retrieval]
+        # Overlap Feature
+        # Compute max overlap among retrieved chunks
+        overlaps = [self.compute_overlap(claim_text, r.get('text', '')) for r in nli_results]
+        max_overlap = max(overlaps) if overlaps else 0.0
+
+        return [max_contra, max_entail, max_neutral, top_retrieval, mean_retrieval, max_overlap]
 
     def train_cv(self, X, y, cv=5):
         cv_splitter = StratifiedKFold(n_splits=cv, shuffle=True, random_state=42)
