@@ -46,8 +46,12 @@ class HybridIndex:
             return []
 
         # 1. Filter indices by book_name if provided
-        valid_indices = [i for i, chunk in enumerate(self.chunks)
-                         if book_name is None or chunk.get('novel_id') == book_name]
+        if book_name:
+            book_name_norm = book_name.lower().strip()
+            valid_indices = [i for i, chunk in enumerate(self.chunks)
+                             if chunk.get('novel_id', '').lower().strip() == book_name_norm]
+        else:
+            valid_indices = list(range(len(self.chunks)))
 
         if not valid_indices:
             return []
