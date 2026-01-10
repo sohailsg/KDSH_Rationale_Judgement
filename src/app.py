@@ -4,22 +4,22 @@ import logging
 import argparse
 import pandas as pd
 import time
+import numpy as np
 from typing import List, Dict
 
 # Import modules
 from src.ingestion.loader import load_documents, process_documents
 from src.processing.chunker import chunk_documents
+from src.processing.claim_tools import ClaimExtractor
 from src.indexing.vector_db import HybridIndex
 from src.reasoning.dossier import format_dossier
 from src.reasoning.validator import EvidenceValidator
+from src.training.trainer import LogicClassifier
 
 # Setup basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def run_evaluation(data_dir, output_file="results.csv"):
-    logging.info("Starting Full Evaluation...")
-    
-    # 1. Ingest and Chunk Data
+def materialize_chunks(data_dir):
     logging.info(f"Ingesting documents from {data_dir}...")
     docs = load_documents(data_dir)
     processed = process_documents(docs)
@@ -35,7 +35,11 @@ def run_evaluation(data_dir, output_file="results.csv"):
     # Run Pathway in background
     import threading
     def run_pw():
-        pw.run()
+        try:
+            pw.run()
+        except Exception:
+            pass
+
     t = threading.Thread(target=run_pw, daemon=True)
     t.start()
 
@@ -57,103 +61,179 @@ def run_evaluation(data_dir, output_file="results.csv"):
 
                 if current_len > 0:
                     logging.info(f"Found {current_len} chunks so far...")
-                    # If we have data, wait for stability (no new writes for a few seconds)
-                    # This is better than breaking immediately.
                     if current_len == len(chunks_df):
-                         # Size stable for one iteration (2s)
                          stability_count += 1
                     else:
                          stability_count = 0
 
                     chunks_df = current_df
 
-                    if stability_count >= 3: # Stable for 6 seconds
+                    if stability_count >= 3:
                         logging.info("Chunk materialization appears stable. Proceeding.")
                         break
             except Exception as e:
                 pass
 
-    if chunks_df.empty:
-        logging.error("No chunks materialized. Exiting.")
-        return
-
-    # Convert to list of dicts
-    chunks = chunks_df.to_dict(orient='records')
-
-    # 2. Build Hybrid Index
-    logging.info(f"Building Hybrid Index with {len(chunks)} chunks...")
-    index = HybridIndex(chunks)
-
-    # 3. Initialize Validator
-    logging.info("Initializing Evidence Validator (NLI model)...")
-    validator = EvidenceValidator()
-
-    # 4. Load Train Data
-    train_file = os.path.join(data_dir, "train.csv")
-    if not os.path.exists(train_file):
-        logging.error(f"Train file not found: {train_file}")
-        return
-
-    train_df = pd.read_csv(train_file)
-    logging.info(f"Loaded {len(train_df)} rows from train.csv")
-
-    # 5. Retrieval & Validation Loop
-    results_list = []
-
-    for i, row in train_df.iterrows():
-        claim = row.get('content', '')
-        if not claim or pd.isna(claim):
-             claim = row.get('backstory', '') # Fallback
-
-        book_col = [c for c in row.index if 'book' in c.lower() or 'novel' in c.lower()]
-        target_book = row[book_col[0]] if book_col else None
-
-        # Normalize book name
-        normalized_book = None
-        if target_book:
-            normalized_book = str(target_book).replace("_", " ").rsplit('.', 1)[0]
-
-        logging.info(f"Processing Row {i}: Book='{normalized_book}'")
-
-        # Retrieve
-        evidence_items = index.search(claim, book_name=normalized_book, k=5)
-
-        # Validate
-        val_result = validator.validate(claim, evidence_items)
-
-        # Append Result
-        results_list.append({
-            'id': row.get('id', i),
-            'label': val_result['label'],
-            'rationale': val_result['rationale'],
-            'confidence': val_result['confidence']
-        })
-
-        print(f"Row {i} -> Label: {val_result['label']} | Conf: {val_result['confidence']:.4f}")
-
-    # 6. Save Output
-    results_df = pd.DataFrame(results_list)
-    results_df.to_csv(output_file, index=False)
-    logging.info(f"Evaluation complete. Results saved to {output_file}")
-
-    # Cleanup
     if os.path.exists(temp_csv):
         os.remove(temp_csv)
 
+    return chunks_df
+
+def process_single_row(row, index, validator, classifier, claim_extractor):
+    content = row.get('content', '')
+    if not content or pd.isna(content): content = row.get('backstory', '')
+
+    book_col = [c for c in row.index if 'book' in c.lower() or 'novel' in c.lower()]
+    target_book = row[book_col[0]] if book_col else None
+    if target_book:
+        normalized_book = str(target_book).replace("_", " ").rsplit('.', 1)[0]
+    else:
+        normalized_book = None
+
+    # Extract Atomic Claims
+    claims = claim_extractor.extract_claims(content)
+
+    feature_vectors = []
+
+    # Evaluate each atomic claim
+    for claim in claims:
+        evidence_items = index.search(claim, book_name=normalized_book, k=5)
+        nli_probs = validator.get_raw_probs(claim, evidence_items)
+        retrieval_scores = [item['score'] for item in evidence_items]
+
+        # Use classifier to predict 0/1 for this claim
+        feat_vec = classifier.extract_features(nli_probs, retrieval_scores)
+        feature_vectors.append(feat_vec)
+
+    return feature_vectors
+
+def run_training_and_eval(data_dir):
+    # 1. Prepare Data
+    chunks_df = materialize_chunks(data_dir)
+    if chunks_df.empty:
+        logging.error("No chunks found. Aborting.")
+        return
+
+    chunks = chunks_df.to_dict(orient='records')
+    logging.info(f"Building Index with {len(chunks)} chunks...")
+    index = HybridIndex(chunks)
+
+    validator = EvidenceValidator()
+    classifier = LogicClassifier() # Helper for extraction
+    claim_extractor = ClaimExtractor()
+
+    train_file = os.path.join(data_dir, "train.csv")
+    train_df = pd.read_csv(train_file)
+
+    # 2. Extract Features
+    logging.info("Extracting features for training (aggregated per backstory)...")
+    X = []
+    y = []
+
+    for i, row in train_df.iterrows():
+        label_str = row.get('label', 'consistent')
+        label = 1 if str(label_str).lower().strip() == 'consistent' else 0
+
+        claim_features_list = process_single_row(row, index, validator, classifier, claim_extractor)
+
+        if not claim_features_list:
+            agg_features = [0.0] * 6 # Fallback size
+        else:
+            matrix = np.array(claim_features_list)
+            # Feature def from Trainer: [max_contra, max_entail, max_neutral, top_retrieval, mean_retrieval]
+
+            # Global aggregates
+            global_max_contra = np.max(matrix[:, 0])
+            global_max_entail = np.max(matrix[:, 1])
+            global_max_retrieval = np.max(matrix[:, 3])
+
+            # Count of highly contradicted claims (p_contra > 0.5)
+            # This is a strong signal for "Contradict"
+            num_bad_claims = np.sum(matrix[:, 0] > 0.5)
+
+            # Interaction: Max Contra weighted by its retrieval score?
+            # Or just pass the count.
+            agg_features = [global_max_contra, global_max_entail, global_max_retrieval, num_bad_claims, len(claim_features_list)]
+
+        X.append(agg_features)
+        y.append(label)
+
+    X = np.array(X)
+    y = np.array(y)
+
+    # 3. CV Training
+    logging.info("Running Cross-Validation on Aggregated Features...")
+    mean_acc, std_acc = classifier.train_cv(X, y, cv=5)
+    logging.info(f"Cross-Validation Accuracy: {mean_acc:.4f} (+/- {std_acc:.4f})")
+
+    # 4. Final Training
+    classifier.train(X, y)
+
+    # 5. Predict on Test
+    test_file = os.path.join(data_dir, "test.csv")
+    if os.path.exists(test_file):
+        logging.info("Predicting on test.csv...")
+        test_df = pd.read_csv(test_file)
+        results = []
+
+        for i, row in test_df.iterrows():
+            claim_features_list = process_single_row(row, index, validator, classifier, claim_extractor)
+
+            if not claim_features_list:
+                agg_features = [0.0] * 5
+            else:
+                matrix = np.array(claim_features_list)
+                global_max_contra = np.max(matrix[:, 0])
+                global_max_entail = np.max(matrix[:, 1])
+                global_max_retrieval = np.max(matrix[:, 3])
+                num_bad_claims = np.sum(matrix[:, 0] > 0.5)
+                agg_features = [global_max_contra, global_max_entail, global_max_retrieval, num_bad_claims, len(claim_features_list)]
+
+            pred = classifier.predict([agg_features])[0]
+
+            rationale_text = "Consistent with canon."
+
+            if pred == 0 and claim_features_list:
+                matrix = np.array(claim_features_list)
+                bad_claim_idx = np.argmax(matrix[:, 0])
+
+                content = row.get('content', '') or row.get('backstory', '')
+                claims = claim_extractor.extract_claims(content)
+                bad_claim = claims[bad_claim_idx]
+
+                book_col = [c for c in row.index if 'book' in c.lower() or 'novel' in c.lower()]
+                target_book = row[book_col[0]] if book_col else None
+                normalized_book = str(target_book).replace("_", " ").rsplit('.', 1)[0] if target_book else None
+
+                ev = index.search(bad_claim, book_name=normalized_book, k=1)
+                if ev:
+                    rationale_text = f"Claim '{bad_claim[:50]}...' contradicted by: '{ev[0]['chunk']['text'][:200]}...'"
+                else:
+                    rationale_text = f"Claim '{bad_claim[:50]}...' likely contradictory."
+
+            results.append({
+                'id': row.get('id', i),
+                'label': int(pred),
+                'rationale': rationale_text
+            })
+
+        res_df = pd.DataFrame(results)
+        res_df.to_csv("submission.csv", index=False)
+        logging.info("Saved predictions to submission.csv")
+
 def main():
     parser = argparse.ArgumentParser(description="KDSH 2026 Track A Runner")
-    parser.add_argument("--mode", type=str, default="run", choices=["run", "smoke_test", "evaluate"], help="Mode to run the app")
+    parser.add_argument("--mode", type=str, default="train_eval", choices=["train_eval", "smoke_test", "evaluate"], help="Mode to run the app")
     args = parser.parse_args()
-    
+
     data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
 
-    if args.mode == "smoke_test":
-        # Keep the old smoke test function if needed, or map to evaluate
-        run_evaluation(data_dir, output_file="outputs/smoke_test_results.csv")
+    if args.mode == "train_eval":
+        run_training_and_eval(data_dir)
+    elif args.mode == "smoke_test":
+        pass
     elif args.mode == "evaluate":
-        run_evaluation(data_dir, output_file="results.csv")
-    else:
-        logging.info("Use --mode evaluate to generate results.csv")
+        pass
 
 if __name__ == "__main__":
     main()

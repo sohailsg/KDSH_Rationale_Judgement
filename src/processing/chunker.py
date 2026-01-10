@@ -2,28 +2,19 @@ import pathway as pw
 import hashlib
 import re
 
-def chunk_documents(documents, chunk_size=1000, overlap=200):
+def chunk_documents(documents, chunk_size=2000, overlap=200):
     """
     Chunks the documents using a sliding window strategy.
+    Updated to target ~400-600 tokens (approx 2000 chars).
 
     Args:
         documents: A Pathway Table with columns [novel_id, text, path]
-        chunk_size: Target size of each chunk (in characters/words, here roughly characters for simplicity)
-        overlap: Overlap between chunks
+        chunk_size: Target size of each chunk in characters. Default 2000 (~500 tokens).
+        overlap: Overlap between chunks in characters.
     """
     
     @pw.udf
     def chunk_text_with_metadata(text):
-        # Simple character-based sliding window
-        # For "hierarchical" or more advanced chunking, one would parse chapters first.
-        # But per requirements: "target ~1000 tokens with ~200 overlap".
-        # Assuming ~4 chars per token, 1000 tokens ~ 4000 chars.
-        # But let's stick to the parameter interpretation. If it means tokens, we should approximate.
-        # Let's assume the input `chunk_size` is in characters for this simple baseline if not specified.
-        # "target ~1000 tokens" -> let's default to 4000 chars if not specified.
-        # But keeping the default 1000 passed in, if interpreted as tokens, user should pass 4000.
-        # I will use the passed parameters directly.
-
         chunks = []
         n = len(text)
         if n == 0:
@@ -35,7 +26,9 @@ def chunk_documents(documents, chunk_size=1000, overlap=200):
 
         for i in range(0, n, step):
             chunk_content = text[i : i + chunk_size]
-            # Simple metadata extraction: check for "Chapter"
+            # Simple metadata extraction: check for "Chapter" at start or inside
+            # We look for the *last* chapter header seen so far in the text flow, or inside this chunk.
+            # Ideally stateful, but for parallel chunks we just look inside.
             chapter_match = re.search(r'(Chapter\s+\d+|[IVXLCDM]+\.)', chunk_content, re.IGNORECASE)
             chapter_title = chapter_match.group(0) if chapter_match else None
 
@@ -85,12 +78,12 @@ if __name__ == '__main__':
     documents = pw.Table.from_pandas(
         pd.DataFrame({
             'novel_id': ['Test Book'],
-            'text': ['Chapter 1. This is a long text that needs to be chunked. ' * 50],
+            'text': ['Chapter 1. This is a long text that needs to be chunked. ' * 100],
             'path': ['/fake/path.txt']
         }),
         schema=Document
     )
     
-    chunked_data = chunk_documents(documents, chunk_size=100, overlap=20)
+    chunked_data = chunk_documents(documents, chunk_size=2000, overlap=200)
     
     pw.debug.compute_and_print(chunked_data)
