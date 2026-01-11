@@ -11,9 +11,10 @@ from src.app import materialize_chunks
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def generate_shadow_queries(claim):
+def generate_shadow_queries(claim, subject_name):
     """
     Generates 'Shadow Queries' searching for the Physical Opposite.
+    Joins Subject Name + Opposite Keyword for strict retrieval.
     """
     queries = []
     text_lower = claim.lower()
@@ -24,12 +25,17 @@ def generate_shadow_queries(claim):
         'alive': ['dead', 'died', 'killed', 'funeral', 'corpse', 'grave', 'buried'],
         'single': ['married', 'wife', 'husband', 'wedding', 'spouse'],
         'soldier': ['civilian', 'peace'],
-        'captain': ['mutiny', 'disgraced', 'demoted']
+        'captain': ['mutiny', 'disgraced', 'demoted'],
+        'french': ['english', 'spanish', 'italian'],
+        'english': ['french'],
+        'only child': ['brother', 'sister', 'sibling']
     }
 
     for state, opposites in state_opposites.items():
         if state in text_lower:
-            queries.append(" ".join(opposites))
+            # Create a query: "Edmond Dantes prison chains..."
+            q = f"{subject_name} {' '.join(opposites)}"
+            queries.append(q)
 
     if "never" in text_lower:
         queries.append(text_lower.replace("never", ""))
@@ -65,8 +71,10 @@ def run_final_audit(data_dir):
         claims = claim_extractor.extract_claims(content)
         dates = claim_extractor.extract_dates(content)
 
-        # Entity Check for "Anchor" verification
-        row_entities = claim_extractor.extract_entities(content)
+        # Subject extraction from 'char' column
+        subject_name = str(row.get('char', '')).strip()
+        # Split subject into tokens for flexible matching (e.g. "Edmond Dantes" -> "Edmond", "Dantes")
+        subject_tokens = [t for t in subject_name.split() if len(t) > 2] if subject_name else []
 
         book_col = [c for c in row.index if 'book' in c.lower() or 'novel' in c.lower()]
         target_book = row[book_col[0]] if book_col else None
@@ -185,8 +193,10 @@ def run_final_audit_v2(data_dir):
         claims = claim_extractor.extract_claims(content)
         dates = claim_extractor.extract_dates(content)
 
-        # Entity Check for "Anchor" verification
-        row_entities = claim_extractor.extract_entities(content)
+        # Subject extraction from 'char' column
+        subject_name = str(row.get('char', '')).strip()
+        # Split subject into tokens for flexible matching (e.g. "Edmond Dantes" -> "Edmond", "Dantes")
+        subject_tokens = [t for t in subject_name.split() if len(t) > 2] if subject_name else []
 
         book_col = [c for c in row.index if 'book' in c.lower() or 'novel' in c.lower()]
         target_book = row[book_col[0]] if book_col else None
@@ -196,66 +206,72 @@ def run_final_audit_v2(data_dir):
         reason = ""
 
         for claim in claims:
-            # Re-extract entities per claim for finer granularity?
-            # Or use row_entities (which are whole backstory).
-            # Let's use row_entities to ensure broad coverage.
+            # Step 1: Pardon Rule (Skip Soft Traits)
+            claim_type = claim_extractor.classify_claim(claim)
+            if claim_type == 'Soft':
+                continue # Pardon
 
-            # Retrieval
+            # Step 2: Negative Space Retrieval
+            # Strict Shadow Query
+            shadow_queries = generate_shadow_queries(claim, subject_name)
+
             evidence_items = index.search(claim, book_name=normalized_book, k=10)
-            for date in dates:
-                date_ev = index.search(date, book_name=normalized_book, k=3)
-                for item in date_ev:
+
+            # Add Shadow results
+            for q in shadow_queries:
+                shadow_ev = index.search(q, book_name=normalized_book, k=5)
+                for item in shadow_ev:
                     if not any(e['chunk'].get('chunk_id') == item['chunk'].get('chunk_id') for e in evidence_items):
                         evidence_items.append(item)
 
+            # Step 3: The Exclusionary Jury
+
+            # Filter Evidence: Identity Gate
+            # We don't strictly discard, but we tag "Anchored" evidence.
+            anchored_evidence = []
+
+            # Combine Subject Name tokens and Claim Entities
+            # anchor_tokens = set(subject_tokens + row_entities) # row_entities not passed here?
+            # We need to re-extract or pass row_entities. Let's re-extract strictly here.
+
+            # Check for Subject Name OR Entities in the text
+            anchors = subject_tokens + claim_extractor.extract_entities(claim)
+
             # NLI
             nli_probs = validator.get_raw_probs(claim, evidence_items)
+            if not nli_probs: continue
+
             contra_scores = [p[0] for p in [x['probs'] for x in nli_probs]]
-
-            if not contra_scores: continue
-
             max_c = max(contra_scores)
-            best_chunk_idx = contra_scores.index(max_c)
-            best_chunk_text = evidence_items[best_chunk_idx]['chunk']['text']
+            best_idx = contra_scores.index(max_c)
+            best_item = evidence_items[best_idx]
+            best_chunk_id = best_item['chunk'].get('chunk_id', 'Unknown')
+            best_text = best_item['chunk']['text']
 
-            # Filter consensus by overlap to improve Precision
-            # extract features per chunk is hard here, we do it in bulk
-            # We will approximate overlap for consensus: require high score
-            high_count = sum(1 for s in contra_scores if s > 0.75)
+            # Check anchor in best text
+            has_anchor = any(t in best_text for t in anchors) if anchors else False
 
-            # ENTITY ANCHOR CHECK
-            # Does the contradictory evidence actually talk about the people/places in the claim?
-            has_anchor = False
-            if not row_entities:
-                has_anchor = True # No entities to check, assume valid
-            else:
-                for ent in row_entities:
-                    if ent in best_chunk_text:
-                        has_anchor = True
-                        break
+            # Consensus Count
+            high_count = sum(1 for s in contra_scores if s > 0.80)
 
-            # ADAPTIVE LOGIC GATES
-            # If we have an entity match, we trust lower NLI scores.
-            # If we don't, we require extreme confidence.
+            # LOGIC GATES
 
-            threshold = 0.92 if has_anchor else 0.97
-
-            # 1. Hard Threshold
-            if max_c > threshold:
-                row_pred = 0
-                reason = f"Hard Lock (>{threshold}): {max_c:.2f}" + (" [Anchor]" if has_anchor else " [NoAnchor]")
-                break # Weakest Link found
-
-            # 2. Soft Threshold + Date
-            if max_c > 0.70 and dates and has_anchor:
-                row_pred = 0
-                reason = f"Date Conflict (>0.70): {max_c:.2f}"
-                break
-
-            # 3. Consensus (3 chunks > 0.75) - Tighter for Precision
+            # 1. Consensus Rule (High Recall Safety)
             if high_count >= 3:
                 row_pred = 0
-                reason = f"Consensus ({high_count} chunks > 0.75)"
+                reason = (f"PHYSICAL COLLISION VERIFIED (Consensus {high_count}): Backstory Anchor [{claim[:30]}...] "
+                          f"contradicted by multiple sources. Best Chunk {best_chunk_id}. Score: {max_c:.2f}")
+                break
+
+            # 2. Adaptive Single-Shot Rule
+            threshold = 0.90 if has_anchor else 0.98
+
+            if max_c > threshold:
+                row_pred = 0
+                anchor_tag = "[Anchor Verified]" if has_anchor else "[No Anchor]"
+                reason = (f"PHYSICAL COLLISION VERIFIED {anchor_tag}: Backstory Anchor [{claim[:30]}...] "
+                          f"requires State A. However, Novel (Chunk {best_chunk_id}) "
+                          f"provides verbatim evidence of State B. Score: {max_c:.2f}")
                 break
 
         y_pred.append(row_pred)

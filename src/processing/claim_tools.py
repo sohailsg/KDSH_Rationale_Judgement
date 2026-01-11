@@ -16,7 +16,15 @@ class ClaimExtractor:
         # Keywords for Type Classification
         self.hard_fact_keywords = [
             "born", "died", "death", "birth", "father", "mother", "sister", "brother", "son", "daughter",
-            "married", "wedding", "wife", "husband", "arrested", "prison", "jail", "killed", "murdered"
+            "married", "wedding", "wife", "husband", "arrested", "prison", "jail", "killed", "murdered",
+            "captain", "ship", "banker", "wealthy", "poor", "soldier", "general", "count", "king", "queen",
+            "engaged", "fiancé", "buried", "grave", "drowned", "poisoned", "shot", "stabbed"
+        ]
+
+        self.soft_trait_keywords = [
+            "felt", "thought", "believed", "wanted", "hoped", "wished", "loved", "hated", "liked", "disliked",
+            "kind", "cruel", "happy", "sad", "angry", "calm", "smart", "stupid", "brave", "cowardly",
+            "beautiful", "ugly", "rich", "poor" # ambiguous, but context dependent. We keep rich/poor in hard for status
         ]
 
         self.common_starts = {"The", "A", "An", "In", "On", "At", "He", "She", "It", "They", "We", "You", "But", "And", "However", "Although", "Later", "Then"}
@@ -101,23 +109,28 @@ class ClaimExtractor:
 
     def classify_claim(self, claim):
         """
-        Classifies claim as 'Type A' (Hard Fact) or 'Type B' (Soft State).
+        Classifies claim as 'Hard' (State Change/Fact) or 'Soft' (Opinion/Trait).
         """
         text_lower = claim.lower()
 
+        # Soft check first (override)
+        # If it's purely internal state "He felt sad", it's soft.
+        # But "He felt pain when he was shot" -> contains 'shot' (hard).
+        # Heuristic: If it has a hard keyword, it is Hard.
+
         # Check for Dates
         if self.extract_dates(claim):
-            return 'Type A'
+            return 'Hard'
 
         # Check for Hard Fact Keywords
         if any(kw in text_lower for kw in self.hard_fact_keywords):
-            return 'Type A'
+            return 'Hard'
 
         # Check for Specific Locations (implies Spatiotemporal assertion)
         if any(loc.lower() in text_lower for loc in self.locations):
-            return 'Type A'
+            return 'Hard'
 
-        return 'Type B'
+        return 'Soft'
 
 if __name__ == "__main__":
     extractor = ClaimExtractor()
