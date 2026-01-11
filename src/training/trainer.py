@@ -64,3 +64,42 @@ class LogicClassifier:
 
     def predict(self, X):
         return self.model.predict(X)
+
+    def predict_strict(self, X, threshold=0.7):
+        """
+        Predicts labels with a strict threshold override.
+        If max_contra (feature index 0) > threshold, Force 0.
+        Otherwise, use model prediction.
+        """
+        base_preds = self.model.predict(X)
+
+        final_preds = []
+        for i, pred in enumerate(base_preds):
+            max_contra = X[i][0]
+            if max_contra > threshold:
+                final_preds.append(0) # Force Contradict
+            else:
+                final_preds.append(pred)
+
+        return np.array(final_preds)
+
+    def predict_recall_oriented(self, X, contra_threshold=0.35, overlap_threshold=0.4):
+        """
+        Force Recall-Oriented Decision.
+        If MaxContra > 0.35 AND Overlap > 0.4 -> Force 0.
+        Else use model prediction.
+        """
+        base_preds = self.model.predict(X)
+        final_preds = []
+
+        for i, pred in enumerate(base_preds):
+            # X structure: [max_contra, max_entail, max_neutral, top_retrieval, mean_retrieval, max_overlap]
+            max_contra = X[i][0]
+            max_overlap = X[i][5]
+
+            if max_contra > contra_threshold and max_overlap > overlap_threshold:
+                final_preds.append(0) # Force Contradict
+            else:
+                final_preds.append(pred)
+
+        return np.array(final_preds)
