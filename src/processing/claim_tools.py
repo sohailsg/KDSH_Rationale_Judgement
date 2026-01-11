@@ -19,6 +19,37 @@ class ClaimExtractor:
             "married", "wedding", "wife", "husband", "arrested", "prison", "jail", "killed", "murdered"
         ]
 
+        self.common_starts = {"The", "A", "An", "In", "On", "At", "He", "She", "It", "They", "We", "You", "But", "And", "However", "Although", "Later", "Then"}
+
+    def extract_entities(self, text):
+        """
+        Extracts potential Named Entities (Capitalized words not at start of sentence, or known locations).
+        Heuristic only since no spaCy.
+        """
+        if not text: return []
+
+        # Regex for capitalized phrases
+        # We try to catch "Edmond Dantes" or "Paris"
+        # We skip words that are likely just sentence starters if they appear at the very beginning
+
+        # 1. Find all capitalized words/phrases
+        pattern = r'\b[A-Z][a-z]+(?: [A-Z][a-z]+)*\b'
+        matches = set(re.findall(pattern, text))
+
+        # 2. Filter out common stopwords if they are single words
+        cleaned = []
+        for m in matches:
+            if ' ' not in m and m in self.common_starts:
+                continue
+            cleaned.append(m)
+
+        # 3. Add Hardcoded Locations if present (case insensitive check, return titled)
+        for loc in self.locations:
+            if loc.lower() in text.lower():
+                cleaned.append(loc)
+
+        return list(set(cleaned))
+
     def extract_claims(self, text):
         """
         Splits text into a list of atomic claims (sentences).
