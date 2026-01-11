@@ -266,13 +266,15 @@ def run_final_audit_v2(data_dir):
             print(f"[FP] ID {row.get('id')}: {reason}")
 
     # Metrics
-    from sklearn.metrics import precision_score, recall_score
+    from sklearn.metrics import precision_score, recall_score, confusion_matrix
     rec = recall_score(y_true, y_pred, pos_label=0)
     prec = precision_score(y_true, y_pred, pos_label=0)
+    cm = confusion_matrix(y_true, y_pred, labels=[1, 0]) # 1=Consistent (Neg), 0=Inconsistent (Pos)
 
     print(f"\n=== Final Physics Engine Metrics ===")
-    print(f"Recall: {rec:.4f} (Target 0.73-0.78)")
-    print(f"Precision: {prec:.4f} (Target > 0.85)")
+    print(f"Confusion Matrix (Labels: [Consistent, Inconsistent]):\n{cm}")
+    print(f"Recall (Sensitivity): {rec:.4f}")
+    print(f"Precision (PPV): {prec:.4f}")
 
 if __name__ == "__main__":
     run_final_audit_v2("data")
