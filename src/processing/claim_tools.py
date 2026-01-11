@@ -10,6 +10,8 @@ class ClaimExtractor:
         self.split_pattern = r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s'
         # Date pattern: 1700-1999
         self.date_pattern = r'\b(17|18|19)\d{2}\b'
+        # Location keywords (Hardcoded for 19th century context, expandable)
+        self.locations = ["Paris", "London", "Rome", "Marseille", "Château d’If", "prison", "dungeon", "sea", "India", "Spain", "Italy"]
 
     def extract_claims(self, text):
         """
@@ -40,8 +42,28 @@ class ClaimExtractor:
             return []
         return re.findall(self.date_pattern, text)
 
+    def extract_anchors(self, text):
+        """
+        Extracts Spatiotemporal Anchors: (Date, Location).
+        Returns list of dicts.
+        """
+        anchors = []
+        dates = self.extract_dates(text)
+
+        # Simple extraction: if sentence has date and location
+        claims = self.extract_claims(text)
+        for claim in claims:
+            c_dates = self.extract_dates(claim)
+            c_locs = [loc for loc in self.locations if loc.lower() in claim.lower()]
+
+            if c_dates:
+                for d in c_dates:
+                    anchors.append({'date': d, 'locations': c_locs, 'claim': claim})
+
+        return anchors
+
 if __name__ == "__main__":
     extractor = ClaimExtractor()
-    text = "Thalcave’s people faded as colonists advanced. His father knew the pampas geography. In 1852, boyhood was spent roaming the plains."
+    text = "In 1815, Thalcave was in Paris. Later he went to Rome."
     print("Claims:", extractor.extract_claims(text))
-    print("Dates:", extractor.extract_dates(text))
+    print("Anchors:", extractor.extract_anchors(text))
