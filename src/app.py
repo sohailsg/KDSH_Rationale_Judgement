@@ -233,9 +233,11 @@ def main():
     if args.mode == "train_eval":
         run_training_and_eval(data_dir)
     elif args.mode == "smoke_test":
-        pass
+        # Legacy mode: just run training/eval which covers the requirements
+        run_training_and_eval(data_dir)
     elif args.mode == "evaluate":
-        pass
+        # Legacy mode: just run training/eval
+        run_training_and_eval(data_dir)
 
 if __name__ == "__main__":
     main()
