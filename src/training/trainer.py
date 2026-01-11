@@ -93,9 +93,17 @@ class LogicClassifier:
         final_preds = []
 
         for i, pred in enumerate(base_preds):
-            # X structure: [max_contra, max_entail, max_neutral, top_retrieval, mean_retrieval, max_overlap]
+            # X structure depends on context (atomic vs aggregated).
+            # In src/app.py (aggregated): [max_c, max_e, max_r, max_o, num_bad, len]
+            # So Overlap is at index 3.
             max_contra = X[i][0]
-            max_overlap = X[i][5]
+            if X.shape[1] == 6:
+                # Assuming App Aggregation
+                max_overlap = X[i][3]
+            else:
+                # Assuming Trainer Extraction (Atomic)
+                # [max_c, max_e, max_n, top_r, mean_r, max_o]
+                max_overlap = X[i][5]
 
             if max_contra > contra_threshold and max_overlap > overlap_threshold:
                 final_preds.append(0) # Force Contradict
