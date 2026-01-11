@@ -5,19 +5,10 @@ class EvidenceValidator:
     """
     Validates claims against evidence using an NLI model.
     """
-    def __init__(self, model_name="cross-encoder/nli-distilroberta-base"):
+    def __init__(self, model_name="cross-encoder/nli-deberta-v3-large"):
+        # Use the requested large model for higher accuracy
         self.model = CrossEncoder(model_name)
-        # NLI labels: 0: contradiction, 1: entailment, 2: neutral (usually, but verify for specific model)
-        # For 'cross-encoder/nli-distilroberta-base':
-        # Label mapping: {'contradiction': 0, 'entailment': 1, 'neutral': 2} ?
-        # Actually standard for SNLI/MNLI is: Contradiction, Entailment, Neutral?
-        # Let's check documentation or assume standard mapping:
-        # distilroberta-base trained on SNLI/MNLI usually has 3 classes.
-        # Often: 0: contradiction, 1: entailment, 2: neutral.
-        # But sometimes it's Entailment, Neutral, Contradiction.
-        # I will print the label mapping in __init__ if possible or assume standard.
-        # cross-encoder/nli-distilroberta-base:
-        # Labels: 0: contradiction, 1: entailment, 2: neutral.
+        # Deberta-v3-large NLI labels are typically: 0: Contradiction, 1: Entailment, 2: Neutral
         self.label_mapping = {0: 'contradiction', 1: 'entailment', 2: 'neutral'}
 
     def get_raw_probs(self, claim, evidence_items):

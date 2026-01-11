@@ -5,6 +5,8 @@ import argparse
 import pandas as pd
 import time
 import numpy as np
+import threading
+import re
 from typing import List, Dict
 
 # Import modules
@@ -12,14 +14,15 @@ from src.ingestion.loader import load_documents, process_documents
 from src.processing.chunker import chunk_documents
 from src.processing.claim_tools import ClaimExtractor
 from src.indexing.vector_db import HybridIndex
-from src.reasoning.dossier import format_dossier
 from src.reasoning.validator import EvidenceValidator
-from src.training.trainer import LogicClassifier
 
 # Setup basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def materialize_chunks(data_dir):
+    """
+    Ingests and processes documents using Pathway, writing chunks to a temporary CSV.
+    """
     logging.info(f"Ingesting documents from {data_dir}...")
     docs = load_documents(data_dir)
     processed = process_documents(docs)
@@ -33,7 +36,6 @@ def materialize_chunks(data_dir):
     pw.io.csv.write(chunked_table, temp_csv)
 
     # Run Pathway in background
-    import threading
     def run_pw():
         try:
             pw.run()
@@ -46,7 +48,7 @@ def materialize_chunks(data_dir):
     # Wait for data
     logging.info("Waiting for chunks to be materialized...")
     wait_time = 0
-    max_wait = 60 # seconds increased for stability check
+    max_wait = 60
     chunks_df = pd.DataFrame()
     stability_count = 0
 
@@ -79,175 +81,189 @@ def materialize_chunks(data_dir):
 
     return chunks_df
 
-def process_single_row(row, index, validator, classifier, claim_extractor):
-    content = row.get('content', '')
-    if not content or pd.isna(content): content = row.get('backstory', '')
+def generate_shadow_queries(claim, subject_name):
+    """
+    Generates 'Shadow Queries' searching for the Physical Opposite.
+    """
+    queries = []
+    text_lower = claim.lower()
 
-    book_col = [c for c in row.index if 'book' in c.lower() or 'novel' in c.lower()]
-    target_book = row[book_col[0]] if book_col else None
-    if target_book:
-        normalized_book = str(target_book).replace("_", " ").rsplit('.', 1)[0]
-    else:
-        normalized_book = None
+    state_opposites = {
+        'free': ['prison', 'chains', 'cell', 'dungeon', 'arrest', 'sentence', 'captive'],
+        'wealthy': ['poor', 'beggar', 'debt', 'starving', 'penniless'],
+        'alive': ['dead', 'died', 'killed', 'funeral', 'corpse', 'grave', 'buried'],
+        'single': ['married', 'wife', 'husband', 'wedding', 'spouse'],
+        'soldier': ['civilian', 'peace'],
+        'captain': ['mutiny', 'disgraced', 'demoted'],
+        'french': ['english', 'spanish', 'italian'],
+        'english': ['french'],
+        'only child': ['brother', 'sister', 'sibling']
+    }
 
-    # Extract Atomic Claims
-    claims = claim_extractor.extract_claims(content)
+    for state, opposites in state_opposites.items():
+        if state in text_lower:
+            # Create a query: "Edmond Dantes prison chains..."
+            q = f"{subject_name} {' '.join(opposites)}"
+            queries.append(q)
 
-    feature_vectors = []
-    evidence_metadata = [] # Store evidence for rationale generation
+    if "never" in text_lower:
+        queries.append(text_lower.replace("never", ""))
 
-    # Evaluate each atomic claim
-    for claim in claims:
-        # Revert K to 5 for stability
-        evidence_items = index.search(claim, book_name=normalized_book, k=5)
-        nli_probs = validator.get_raw_probs(claim, evidence_items)
-        retrieval_scores = [item['score'] for item in evidence_items]
+    return queries
 
-        # Pass claim text for overlap calculation
-        feat_vec = classifier.extract_features(nli_probs, retrieval_scores, claim)
-        feature_vectors.append(feat_vec)
+def check_spatiotemporal_collision(claim_anchors, chunk_text):
+    """
+    Module C Helper: Check for 100% Date/Location match within the evidence.
+    If the evidence discusses the SAME date/location but is contradictory (NLI > 0.45),
+    it implies a collision.
+    """
+    if not claim_anchors:
+        return False
 
-        # Store metadata for rationale
-        if evidence_items:
-            evidence_metadata.append({
-                'chunk_text': evidence_items[0]['chunk']['text'],
-                'chapter_title': evidence_items[0]['chunk'].get('chapter_title', 'Unknown Chapter')
-            })
-        else:
-            evidence_metadata.append(None)
+    for anchor in claim_anchors:
+        date = anchor.get('date')
+        locations = anchor.get('locations', [])
 
-    return feature_vectors, evidence_metadata
+        # Check Date Match
+        if date and date in chunk_text:
+            return True
 
-def run_training_and_eval(data_dir):
-    # 1. Prepare Data
+        # Check Location Match
+        for loc in locations:
+            if loc in chunk_text:
+                return True
+
+    return False
+
+def run_forensic_engine(data_dir):
+    # 1. Initialize Pathway Vector Store (Ingest & Index)
     chunks_df = materialize_chunks(data_dir)
     if chunks_df.empty:
         logging.error("No chunks found. Aborting.")
         return
 
     chunks = chunks_df.to_dict(orient='records')
-    logging.info(f"Building Index with {len(chunks)} chunks...")
+    logging.info(f"Building Pathway HybridIndex with {len(chunks)} chunks...")
     index = HybridIndex(chunks)
 
-    validator = EvidenceValidator()
-    classifier = LogicClassifier() # Helper for extraction
+    validator = EvidenceValidator() # Uses cross-encoder/nli-deberta-v3-large
     claim_extractor = ClaimExtractor()
 
-    train_file = os.path.join(data_dir, "train.csv")
-    train_df = pd.read_csv(train_file)
+    # 2. Load Input Data
+    # Prefer test.csv, fallback to train.csv for demo
+    input_file = os.path.join(data_dir, "test.csv")
+    if not os.path.exists(input_file):
+        logging.warning("test.csv not found, falling back to train.csv")
+        input_file = os.path.join(data_dir, "train.csv")
 
-    # 2. Extract Features
-    logging.info("Extracting features for training (aggregated per backstory)...")
-    X = []
-    y = []
+    df = pd.read_csv(input_file)
+    results = []
 
-    for i, row in train_df.iterrows():
-        label_str = row.get('label', 'consistent')
-        label = 1 if str(label_str).lower().strip() == 'consistent' else 0
+    logging.info("Starting Forensic Engine Iteration (Module A, B, C)...")
 
-        claim_features_list, _ = process_single_row(row, index, validator, classifier, claim_extractor)
+    for i, row in df.iterrows():
+        row_id = row.get('id', i)
+        content = row.get('content', '') or row.get('backstory', '')
 
-        if not claim_features_list:
-            agg_features = [0.0] * 6 # Fallback size
-        else:
-            matrix = np.array(claim_features_list)
-            # Feature def: [max_contra, max_entail, max_neutral, top_retrieval, mean_retrieval, max_overlap]
+        # Subject Extraction (Critical for Identity Guard)
+        subject_name = str(row.get('char', '')).strip()
+        subject_tokens = [t for t in subject_name.split() if len(t) > 2] if subject_name else []
 
-            global_max_contra = np.max(matrix[:, 0])
-            global_max_entail = np.max(matrix[:, 1])
-            global_max_retrieval = np.max(matrix[:, 3])
-            global_max_overlap = np.max(matrix[:, 5])
-            num_bad_claims = np.sum(matrix[:, 0] > 0.35)
+        # Module A: Atomic SPS Deconstruction
+        claims = claim_extractor.extract_claims(content)
+        row_pred = 1 # Default Consistent
+        rationale = "Consistent with canon."
 
-            agg_features = [global_max_contra, global_max_entail, global_max_retrieval, global_max_overlap, num_bad_claims, len(claim_features_list)]
+        book_col = [c for c in row.index if 'book' in c.lower() or 'novel' in c.lower()]
+        target_book = row[book_col[0]] if book_col else None
+        normalized_book = str(target_book).replace("_", " ").rsplit('.', 1)[0] if target_book else None
 
-        X.append(agg_features)
-        y.append(label)
+        for claim in claims:
+            # Filter: Hard Facts only (Pardon Rule)
+            if claim_extractor.classify_claim(claim) == 'Soft':
+                continue
 
-    X = np.array(X)
-    y = np.array(y)
+            # Module B: Adversarial Retrieval
+            # Shadow Query
+            shadow_queries = generate_shadow_queries(claim, subject_name)
+            evidence_items = index.search(claim, book_name=normalized_book, k=5)
 
-    # 3. CV Training
-    logging.info("Running Cross-Validation on Aggregated Features...")
-    mean_acc, std_acc = classifier.train_cv(X, y, cv=5)
-    logging.info(f"Cross-Validation Accuracy: {mean_acc:.4f} (+/- {std_acc:.4f})")
+            for q in shadow_queries:
+                shadow_ev = index.search(q, book_name=normalized_book, k=3)
+                for item in shadow_ev:
+                    if not any(e['chunk'].get('chunk_id') == item['chunk'].get('chunk_id') for e in evidence_items):
+                        evidence_items.append(item)
 
-    # 4. Final Training
-    classifier.train(X, y)
-
-    # 5. Predict on Test
-    test_file = os.path.join(data_dir, "test.csv")
-    if os.path.exists(test_file):
-        logging.info("Predicting on test.csv...")
-        test_df = pd.read_csv(test_file)
-        results = []
-
-        for i, row in test_df.iterrows():
-            claim_features_list, evidence_metadata = process_single_row(row, index, validator, classifier, claim_extractor)
-
-            if not claim_features_list:
-                agg_features = [0.0] * 6
-                final_prob = 0.0 # Unknown
+            # Identity Guard: Discard evidence not mentioning subject
+            filtered_evidence = []
+            if not subject_tokens:
+                filtered_evidence = evidence_items # Risky fallback
             else:
-                matrix = np.array(claim_features_list)
-                global_max_contra = np.max(matrix[:, 0])
-                global_max_entail = np.max(matrix[:, 1])
-                global_max_retrieval = np.max(matrix[:, 3])
-                global_max_overlap = np.max(matrix[:, 5])
-                num_bad_claims = np.sum(matrix[:, 0] > 0.35)
-                agg_features = [global_max_contra, global_max_entail, global_max_retrieval, global_max_overlap, num_bad_claims, len(claim_features_list)]
+                for item in evidence_items:
+                    txt = item['chunk']['text']
+                    if any(token in txt for token in subject_tokens):
+                        filtered_evidence.append(item)
 
-            # Predict
-            pred = classifier.predict([agg_features])[0]
+            if not filtered_evidence:
+                continue
 
-            # Rationale Generation
-            rationale_text = "Consistent with canon."
+            # Verification: NLI
+            nli_probs = validator.get_raw_probs(claim, filtered_evidence)
+            if not nli_probs: continue
 
-            if pred == 0 and claim_features_list:
-                # Find the "Weakest Link" claim
-                matrix = np.array(claim_features_list)
-                bad_claim_idx = np.argmax(matrix[:, 0])
-                score = matrix[bad_claim_idx, 0] # Max Contra Score
+            contra_scores = [p[0] for p in [x['probs'] for x in nli_probs]]
+            max_c = max(contra_scores)
+            best_idx = contra_scores.index(max_c)
+            best_item = filtered_evidence[best_idx]
+            best_chunk_id = best_item['chunk'].get('chunk_id', 'Unknown')
+            best_chapter = best_item['chunk'].get('chapter_title', 'Unknown Chapter')
+            best_text = best_item['chunk']['text']
 
-                content = row.get('content', '') or row.get('backstory', '')
-                claims = claim_extractor.extract_claims(content)
-                bad_claim = claims[bad_claim_idx]
+            # Module C: The Jury Gate (Decision Engine)
+            is_collision = False
 
-                ev_meta = evidence_metadata[bad_claim_idx]
-                if ev_meta:
-                    chunk_text = ev_meta['chunk_text']
-                    chapter = ev_meta['chapter_title']
+            # Rule 1: High Confidence (> 0.85)
+            if max_c > 0.85:
+                is_collision = True
 
-                    rationale_text = (f"The system identified a high-probability causal break (Score: {score:.2f}). "
-                                      f"While the backstory claims '{bad_claim[:50]}...', "
-                                      f"the novel's internal state in '{chapter}' establishes '{chunk_text[:100]}...'. "
-                                      f"These states are mutually exclusive in a 19th-century physical reality.")
-                else:
-                    rationale_text = f"Claim '{bad_claim[:50]}...' flagged as contradictory (Score: {score:.2f}) but evidence context is missing."
+            # Rule 2: Medium Confidence (> 0.45) AND Spatiotemporal Match
+            elif max_c > 0.45:
+                # Extract anchors specifically for this claim
+                # Note: We need a method to extract anchors from a *single* claim string.
+                # Re-using the extractor logic roughly:
+                claim_anchors = claim_extractor.extract_anchors(claim)
+                if check_spatiotemporal_collision(claim_anchors, best_text):
+                    is_collision = True
 
-            results.append({
-                'id': row.get('id', i),
-                'label': int(pred),
-                'rationale': rationale_text
-            })
+            if is_collision:
+                row_pred = 0
+                # Format: STATE COLLISION: Claim [X] asserts [State A]. Novel Chapter [Y] documents [State B]. Since [State A] and [State B] are causally exclusive in the narrative timeline, the backstory is disproven.
+                # We approximate [State A] as the claim, and [State B] as the evidence excerpt.
+                rationale = (f"STATE COLLISION: Claim [{claim[:50]}...] asserts [State A]. "
+                             f"Novel Chapter [{best_chapter}] documents [State B] ('{best_text[:100]}...'). "
+                             f"Since [State A] and [State B] are causally exclusive in the narrative timeline, "
+                             f"the backstory is disproven. (Score: {max_c:.2f})")
+                break # Stop at first hard collision
 
-        res_df = pd.DataFrame(results)
-        res_df.to_csv("submission.csv", index=False)
-        logging.info("Saved predictions to submission.csv")
+        results.append({
+            'id': row_id,
+            'prediction': int(row_pred),
+            'rationale': rationale
+        })
+
+    # Write Final Output
+    res_df = pd.DataFrame(results)
+    res_df.to_csv("results.csv", index=False)
+    logging.info(f"Processing complete. Saved {len(results)} rows to results.csv")
 
 def main():
     parser = argparse.ArgumentParser(description="KDSH 2026 Track A Runner")
-    parser.add_argument("--mode", type=str, default="train_eval", choices=["train_eval", "smoke_test", "evaluate"], help="Mode to run the app")
+    # Argument to allow flexibility, though 'run' is default
+    parser.add_argument("--mode", type=str, default="run", help="Execution mode")
     args = parser.parse_args()
 
     data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
-
-    if args.mode == "train_eval":
-        run_training_and_eval(data_dir)
-    elif args.mode == "smoke_test":
-        run_training_and_eval(data_dir)
-    elif args.mode == "evaluate":
-        run_training_and_eval(data_dir)
+    run_forensic_engine(data_dir)
 
 if __name__ == "__main__":
     main()
