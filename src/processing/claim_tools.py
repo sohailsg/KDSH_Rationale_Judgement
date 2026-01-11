@@ -13,6 +13,12 @@ class ClaimExtractor:
         # Location keywords (Hardcoded for 19th century context, expandable)
         self.locations = ["Paris", "London", "Rome", "Marseille", "Château d’If", "prison", "dungeon", "sea", "India", "Spain", "Italy"]
 
+        # Keywords for Type Classification
+        self.hard_fact_keywords = [
+            "born", "died", "death", "birth", "father", "mother", "sister", "brother", "son", "daughter",
+            "married", "wedding", "wife", "husband", "arrested", "prison", "jail", "killed", "murdered"
+        ]
+
     def extract_claims(self, text):
         """
         Splits text into a list of atomic claims (sentences).
@@ -62,8 +68,29 @@ class ClaimExtractor:
 
         return anchors
 
+    def classify_claim(self, claim):
+        """
+        Classifies claim as 'Type A' (Hard Fact) or 'Type B' (Soft State).
+        """
+        text_lower = claim.lower()
+
+        # Check for Dates
+        if self.extract_dates(claim):
+            return 'Type A'
+
+        # Check for Hard Fact Keywords
+        if any(kw in text_lower for kw in self.hard_fact_keywords):
+            return 'Type A'
+
+        # Check for Specific Locations (implies Spatiotemporal assertion)
+        if any(loc.lower() in text_lower for loc in self.locations):
+            return 'Type A'
+
+        return 'Type B'
+
 if __name__ == "__main__":
     extractor = ClaimExtractor()
-    text = "In 1815, Thalcave was in Paris. Later he went to Rome."
+    text = "In 1815, Thalcave was in Paris. Later he felt sad about his father."
     print("Claims:", extractor.extract_claims(text))
-    print("Anchors:", extractor.extract_anchors(text))
+    for c in extractor.extract_claims(text):
+        print(f"Claim: '{c}' -> {extractor.classify_claim(c)}")

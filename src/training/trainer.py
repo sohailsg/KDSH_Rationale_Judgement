@@ -66,47 +66,42 @@ class LogicClassifier:
         return self.model.predict(X)
 
     def predict_strict(self, X, threshold=0.7):
-        """
-        Predicts labels with a strict threshold override.
-        If max_contra (feature index 0) > threshold, Force 0.
-        Otherwise, use model prediction.
-        """
         base_preds = self.model.predict(X)
-
         final_preds = []
         for i, pred in enumerate(base_preds):
             max_contra = X[i][0]
             if max_contra > threshold:
-                final_preds.append(0) # Force Contradict
+                final_preds.append(0)
             else:
                 final_preds.append(pred)
-
         return np.array(final_preds)
 
     def predict_recall_oriented(self, X, contra_threshold=0.35, overlap_threshold=0.4):
         """
-        Force Recall-Oriented Decision.
-        If MaxContra > 0.35 AND Overlap > 0.4 -> Force 0.
-        Else use model prediction.
+        Hybrid Threshold Logic for Balanced Precision/Recall.
+        Goal: Precision > 0.79, Recall > 0.73.
+
+        Logic:
+        1. "Smoking Gun": If MaxContra > 0.85, force 0 (regardless of overlap).
+        2. "Supported Contradiction": If MaxContra > 0.45 AND Overlap > 0.25, force 0.
+        3. Else: Use model prediction (which might be 0 or 1).
         """
         base_preds = self.model.predict(X)
         final_preds = []
 
         for i, pred in enumerate(base_preds):
-            # X structure depends on context (atomic vs aggregated).
-            # In src/app.py (aggregated): [max_c, max_e, max_r, max_o, num_bad, len]
-            # So Overlap is at index 3.
             max_contra = X[i][0]
             if X.shape[1] == 6:
-                # Assuming App Aggregation
-                max_overlap = X[i][3]
+                max_overlap = X[i][3] # Aggregated
             else:
-                # Assuming Trainer Extraction (Atomic)
-                # [max_c, max_e, max_n, top_r, mean_r, max_o]
-                max_overlap = X[i][5]
+                max_overlap = X[i][5] # Atomic
 
-            if max_contra > contra_threshold and max_overlap > overlap_threshold:
-                final_preds.append(0) # Force Contradict
+            # Tier 1: undeniable contradiction
+            if max_contra > 0.85:
+                final_preds.append(0)
+            # Tier 2: strong contradiction with context
+            elif max_contra > 0.45 and max_overlap > 0.25:
+                final_preds.append(0)
             else:
                 final_preds.append(pred)
 
