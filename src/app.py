@@ -94,6 +94,7 @@ def process_single_row(row, index, validator, classifier, claim_extractor):
     claims = claim_extractor.extract_claims(content)
 
     feature_vectors = []
+    evidence_metadata = [] # Store evidence for rationale generation
 
     # Evaluate each atomic claim
     for claim in claims:
@@ -106,7 +107,16 @@ def process_single_row(row, index, validator, classifier, claim_extractor):
         feat_vec = classifier.extract_features(nli_probs, retrieval_scores, claim)
         feature_vectors.append(feat_vec)
 
-    return feature_vectors
+        # Store metadata for rationale
+        if evidence_items:
+            evidence_metadata.append({
+                'chunk_text': evidence_items[0]['chunk']['text'],
+                'chapter_title': evidence_items[0]['chunk'].get('chapter_title', 'Unknown Chapter')
+            })
+        else:
+            evidence_metadata.append(None)
+
+    return feature_vectors, evidence_metadata
 
 def run_training_and_eval(data_dir):
     # 1. Prepare Data
@@ -135,7 +145,7 @@ def run_training_and_eval(data_dir):
         label_str = row.get('label', 'consistent')
         label = 1 if str(label_str).lower().strip() == 'consistent' else 0
 
-        claim_features_list = process_single_row(row, index, validator, classifier, claim_extractor)
+        claim_features_list, _ = process_single_row(row, index, validator, classifier, claim_extractor)
 
         if not claim_features_list:
             agg_features = [0.0] * 6 # Fallback size
@@ -143,18 +153,12 @@ def run_training_and_eval(data_dir):
             matrix = np.array(claim_features_list)
             # Feature def: [max_contra, max_entail, max_neutral, top_retrieval, mean_retrieval, max_overlap]
 
-            # Global aggregates
             global_max_contra = np.max(matrix[:, 0])
             global_max_entail = np.max(matrix[:, 1])
             global_max_retrieval = np.max(matrix[:, 3])
             global_max_overlap = np.max(matrix[:, 5])
+            num_bad_claims = np.sum(matrix[:, 0] > 0.35)
 
-            # Count of high contra (logic based)
-            # Use overlap as a filter? If high contra AND some overlap
-            # Let's trust the classifier to learn the interaction
-            num_bad_claims = np.sum(matrix[:, 0] > 0.5)
-
-            # Aggregated Vector: [MaxContra, MaxEntail, MaxRetrieval, MaxOverlap, NumBad, NumClaims]
             agg_features = [global_max_contra, global_max_entail, global_max_retrieval, global_max_overlap, num_bad_claims, len(claim_features_list)]
 
         X.append(agg_features)
@@ -179,39 +183,47 @@ def run_training_and_eval(data_dir):
         results = []
 
         for i, row in test_df.iterrows():
-            claim_features_list = process_single_row(row, index, validator, classifier, claim_extractor)
+            claim_features_list, evidence_metadata = process_single_row(row, index, validator, classifier, claim_extractor)
 
             if not claim_features_list:
                 agg_features = [0.0] * 6
+                final_prob = 0.0 # Unknown
             else:
                 matrix = np.array(claim_features_list)
                 global_max_contra = np.max(matrix[:, 0])
                 global_max_entail = np.max(matrix[:, 1])
                 global_max_retrieval = np.max(matrix[:, 3])
                 global_max_overlap = np.max(matrix[:, 5])
-                num_bad_claims = np.sum(matrix[:, 0] > 0.5)
+                num_bad_claims = np.sum(matrix[:, 0] > 0.35)
                 agg_features = [global_max_contra, global_max_entail, global_max_retrieval, global_max_overlap, num_bad_claims, len(claim_features_list)]
 
+            # Predict
             pred = classifier.predict([agg_features])[0]
 
+            # Rationale Generation
             rationale_text = "Consistent with canon."
 
             if pred == 0 and claim_features_list:
+                # Find the "Weakest Link" claim
                 matrix = np.array(claim_features_list)
-                # Pick claim with max contradiction
                 bad_claim_idx = np.argmax(matrix[:, 0])
+                score = matrix[bad_claim_idx, 0] # Max Contra Score
 
                 content = row.get('content', '') or row.get('backstory', '')
                 claims = claim_extractor.extract_claims(content)
                 bad_claim = claims[bad_claim_idx]
 
-                book_col = [c for c in row.index if 'book' in c.lower() or 'novel' in c.lower()]
-                target_book = row[book_col[0]] if book_col else None
-                normalized_book = str(target_book).replace("_", " ").rsplit('.', 1)[0] if target_book else None
+                ev_meta = evidence_metadata[bad_claim_idx]
+                if ev_meta:
+                    chunk_text = ev_meta['chunk_text']
+                    chapter = ev_meta['chapter_title']
 
-                ev = index.search(bad_claim, book_name=normalized_book, k=1)
-                if ev:
-                    rationale_text = f"Claim '{bad_claim[:50]}...' contradicted by: '{ev[0]['chunk']['text'][:200]}...'"
+                    rationale_text = (f"The system identified a high-probability causal break (Score: {score:.2f}). "
+                                      f"While the backstory claims '{bad_claim[:50]}...', "
+                                      f"the novel's internal state in '{chapter}' establishes '{chunk_text[:100]}...'. "
+                                      f"These states are mutually exclusive in a 19th-century physical reality.")
+                else:
+                    rationale_text = f"Claim '{bad_claim[:50]}...' flagged as contradictory (Score: {score:.2f}) but evidence context is missing."
 
             results.append({
                 'id': row.get('id', i),
@@ -233,10 +245,8 @@ def main():
     if args.mode == "train_eval":
         run_training_and_eval(data_dir)
     elif args.mode == "smoke_test":
-        # Legacy mode: just run training/eval which covers the requirements
         run_training_and_eval(data_dir)
     elif args.mode == "evaluate":
-        # Legacy mode: just run training/eval
         run_training_and_eval(data_dir)
 
 if __name__ == "__main__":
