@@ -3,3 +3,7 @@ sentence-transformers
 torch
 pandas
 pytest
+rank-bm25
+transformers
+accelerate
+scikit-learn
